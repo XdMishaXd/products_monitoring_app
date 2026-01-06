@@ -1,0 +1,28 @@
+env: "local" # local, dev, prod 
+
+http_server:
+  address: ":8080"
+  timeout: 4s
+  idle_timeout: 30s
+
+jwt_secret: "super-secret-key"
+check_interval: 30m
+
+redis:
+  db: 0
+  addr: "redis:6379"
+  default_ttl: 1m # TTL для кешированных продуктов
+
+rabbitmq:
+  url: "amqp://user:password@rabbitmq:5672/"
+  producer_queue_name: "raw_data"
+  consumer_queue_name: "parsed_data"
+  worker_pool_size: 10
+
+postgres:
+  host: "postgres"
+  port: 5432
+  user: "user"
+  password: "password"
+  dbname: "monitoring-app"
+  sslmode: "disable"

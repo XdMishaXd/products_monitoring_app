@@ -1,0 +1,9 @@
+env: "dev" # local, dev, prod 
+
+parse_retries: 3 # * Количество повторных попыток при ошибках в парсере
+
+rabbitmq:
+  url: "amqp://user:password@rabbitmq:5672/"
+  producer_queue_name: "parsed_data"
+  consumer_queue_name: "raw_data"
+  worker_pool_size: 10
