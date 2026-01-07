@@ -95,7 +95,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 
 	// * Получаем продукты
 	query := `
-    SELECT id, url, title, marketplace, price, in_stock, user_id, last_checked, created_at, updated_at
+    SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
       FROM products
       WHERE user_id = $1
       ORDER BY created_at DESC
