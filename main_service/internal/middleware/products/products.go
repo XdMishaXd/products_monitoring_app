@@ -2,9 +2,7 @@ package products
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"main_service/internal/models"
@@ -22,7 +20,7 @@ type PostgresStorage interface {
 }
 
 type RabbitMQProducer interface {
-	PublishJSON(ctx context.Context, msg any) error
+	PublishJSON(ctx context.Context, product models.ProductForProducer) error
 }
 
 type ProductOperator struct {
@@ -58,12 +56,7 @@ func (p *ProductOperator) SaveProduct(
 		Marketplace: marketplace,
 	}
 
-	data, err := json.Marshal(product)
-	if err != nil {
-		return 0, fmt.Errorf("failed to serialize product: %w", err)
-	}
-
-	err = p.RabbitMQProducer.PublishJSON(ctx, data)
+	err = p.RabbitMQProducer.PublishJSON(ctx, product)
 	if err != nil {
 		return 0, err
 	}

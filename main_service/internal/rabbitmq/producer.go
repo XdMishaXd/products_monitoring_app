@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"main_service/internal/models"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -32,9 +34,9 @@ func NewProducer(ch *amqp.Channel, queueName string) (*Producer, error) {
 
 func (p *Producer) PublishJSON(
 	ctx context.Context,
-	msg any,
+	product models.ProductForProducer,
 ) error {
-	body, err := json.Marshal(msg)
+	body, err := json.Marshal(product)
 	if err != nil {
 		return err
 	}

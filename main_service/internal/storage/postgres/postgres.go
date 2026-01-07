@@ -66,7 +66,7 @@ func (r *PostgresRepo) SaveProduct(
 	err := r.pool.QueryRow(ctx, query, userID, productURL, title, marketplace).Scan(&id)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == storage.UniqueViolation {
-			return 0, storage.ErrUserAlreadyTracksProduct
+			return 0, storage.ErrProductAlreadyExists
 		}
 
 		return 0, fmt.Errorf("%s: failed to save product: %w", op, err)
@@ -133,7 +133,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 	const op = "storage.postgres.ProductByID"
 
 	const query = `
-		SELECT id, url, title, marketplace, price, in_stock, user_id, last_checked, created_at, updated_at
+		SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
 		FROM products
 		WHERE id = $1
 	`
@@ -145,8 +145,8 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 	err := row.Scan(
 		&p.ID,
 		&p.Title,
-		&p.Price,
 		&p.Marketplace,
+		&p.Price,
 		&p.In_stock,
 		&p.Last_checked,
 		&p.Created_at,

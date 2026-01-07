@@ -7,6 +7,6 @@ const (
 )
 
 var (
-	ErrUserAlreadyTracksProduct = errors.New("This product is already tracking")
-	ErrProductsNotFound         = errors.New("products not found")
+	ErrProductAlreadyExists = errors.New("Product already exists")
+	ErrProductsNotFound     = errors.New("products not found")
 )

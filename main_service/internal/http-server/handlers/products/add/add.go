@@ -2,6 +2,7 @@ package addProduct
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
 	"main_service/internal/models"
+	"main_service/internal/storage"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -102,6 +104,15 @@ func New(
 
 		productID, err := prodOp.SaveProduct(ctx, req.URL, req.Title, userID, marketplace)
 		if err != nil {
+			if errors.Is(err, storage.ErrProductAlreadyExists) {
+				log.Info("Product already tracking")
+
+				render.Status(r, http.StatusBadRequest)
+				render.JSON(w, r, resp.Error("Product already tracking"))
+
+				return
+			}
+
 			log.Error("Failed to save product", sl.Err(err))
 
 			render.Status(r, http.StatusInternalServerError)

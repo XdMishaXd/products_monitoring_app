@@ -22,6 +22,64 @@ var (
 	ErrInvalidURL      = errors.New("invalid URL")
 )
 
+var (
+	// JSON паттерны для поиска цены
+	rePriceJSON     = regexp.MustCompile(`"price":\s*"?([\d,\.]+)"?`)
+	reValueJSON     = regexp.MustCompile(`"value":\s*"?([\d,\.]+)"?`)
+	reLowPriceJSON  = regexp.MustCompile(`"lowPrice":\s*"?([\d,\.]+)"?`)
+	rePriceCurrency = regexp.MustCompile(`"priceCurrency":"[A-Z]{3}","price":"?([\d,\.]+)"?`)
+
+	// HTML паттерны с валютой
+	rePriceWithSymbol = regexp.MustCompile(`(?:US\s*)?[$€£]\s*([\d,]+\.?\d*)`)
+	reSymbolWithPrice = regexp.MustCompile(`([\d,]+\.?\d*)\s*(?:US\s*)?[$€£]`)
+
+	// Числовые паттерны около ключевых слов
+	rePriceKeyword = regexp.MustCompile(`(?i)price[^\d]*([\d,]+\.?\d*)`)
+	reCostKeyword  = regexp.MustCompile(`(?i)cost[^\d]*([\d,]+\.?\d*)`)
+
+	// Извлечение числа из очищенной строки
+	reNumber = regexp.MustCompile(`([\d]+\.?[\d]*)`)
+
+	// Проверка наличия цифр
+	reHasDigit = regexp.MustCompile(`\d`)
+)
+
+var (
+	priceSelectors = []string{
+		// Новые селекторы для обновленной структуры eBay
+		"div.x-price-primary span.ux-textspans",
+		"div.x-price-primary .ux-textspans",
+		".x-price-primary [class*='ux-textspans']",
+		"[data-testid='x-price-primary'] span",
+		"[data-testid='x-price-primary'] .ux-textspans",
+
+		// Старые селекторы
+		".x-price-primary .ux-textspans--BOLD",
+		"div[data-testid='x-price-primary'] span",
+		".mainPrice .ux-textspans",
+		"span[itemprop='price']",
+		".x-bin-price__content .ux-textspans",
+
+		// Альтернативные селекторы
+		".x-price-approx span",
+		".x-price-section span",
+		"[class*='price'] [class*='textspans']",
+	}
+
+	metaSelectors = []string{
+		"meta[property='og:price:amount']",
+		"meta[property='product:price:amount']",
+		"meta[name='twitter:data1']",
+	}
+
+	replacements = []string{
+		"US", "EUR", "GBP", "USD",
+		"$", "€", "£", "¥",
+		"Price:", "price:", "PRICE:",
+		"approximately", "approx", "~",
+	}
+)
+
 type EbayParser struct {
 	client *http.Client
 }
@@ -57,11 +115,15 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 
 	// * Заголовки для имитации браузера
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Cache-Control", "max-age=0")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -84,7 +146,7 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	}
 
 	// Парсим цену
-	price, err := p.parsePrice(doc)
+	price, err := p.parsePrice(doc, string(body))
 	if err != nil {
 		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -134,20 +196,16 @@ func (p *EbayParser) ParseWithRetry(
 }
 
 // * parsePrice извлекает цену из документа
-func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
-	// * Селекторы для цены
-	selectors := []string{
-		".x-price-primary span.ux-textspans",
-		".x-price-primary .ux-textspans--BOLD",
-		"div[data-testid='x-price-primary'] span",
-		".mainPrice .ux-textspans",
-		"span[itemprop='price']",
-		".x-bin-price__content .ux-textspans",
-	}
-
+func (p *EbayParser) parsePrice(doc *goquery.Document, htmlText string) (float32, error) {
 	var priceText string
-	for _, selector := range selectors {
-		priceText = doc.Find(selector).First().Text()
+	for _, selector := range priceSelectors {
+		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
+			text := strings.TrimSpace(s.Text())
+			if text != "" && containsPrice(text) {
+				priceText = text
+				return
+			}
+		})
 		if priceText != "" {
 			break
 		}
@@ -155,13 +213,59 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 
 	// * Поиск цены по regexp
 	if priceText == "" {
-		htmlText, _ := doc.Html()
+		doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
+			jsonText := s.Text()
 
-		re := regexp.MustCompile(`"price":\s*"([\d,\.]+)"`)
-		matches := re.FindStringSubmatch(htmlText)
+			regexps := []*regexp.Regexp{
+				rePriceJSON,
+				reValueJSON,
+				reLowPriceJSON,
+			}
 
-		if len(matches) > 1 {
-			priceText = matches[1]
+			for _, re := range regexps {
+				matches := re.FindStringSubmatch(jsonText)
+				if len(matches) > 1 {
+					priceText = matches[1]
+					return
+				}
+			}
+		})
+	}
+
+	// * Regex поиск в HTML
+	if priceText == "" {
+		regexps := []*regexp.Regexp{
+			rePriceJSON,
+			reValueJSON,
+			rePriceCurrency,
+			rePriceWithSymbol,
+			reSymbolWithPrice,
+			rePriceKeyword,
+			reCostKeyword,
+		}
+
+		for _, re := range regexps {
+			matches := re.FindStringSubmatch(htmlText)
+			if len(matches) > 1 {
+				candidate := matches[1]
+				// Проверяем, что это похоже на цену (не слишком большое число)
+				if len(strings.ReplaceAll(candidate, ",", "")) <= 10 {
+					priceText = candidate
+					break
+				}
+			}
+		}
+	}
+
+	// Поиск meta тегов
+	if priceText == "" {
+		for _, selector := range metaSelectors {
+			if content, exists := doc.Find(selector).First().Attr("content"); exists {
+				if containsPrice(content) {
+					priceText = content
+					break
+				}
+			}
 		}
 	}
 
@@ -169,21 +273,7 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 		return 0, ErrPriceNotFound
 	}
 
-	// Очищаем текст цены от лишних символов
-	priceText = strings.TrimSpace(priceText)
-	priceText = strings.ReplaceAll(priceText, "US", "")
-	priceText = strings.ReplaceAll(priceText, "$", "")
-	priceText = strings.ReplaceAll(priceText, "€", "")
-	priceText = strings.ReplaceAll(priceText, "£", "")
-	priceText = strings.ReplaceAll(priceText, ",", "")
-	priceText = strings.TrimSpace(priceText)
-
-	priceFloat, err := strconv.ParseFloat(priceText, 32)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse price '%s': %w", priceText, err)
-	}
-
-	return float32(priceFloat), nil
+	return cleanAndParsePrice(priceText)
 }
 
 // * parseAvailability проверяет наличие товара
@@ -244,4 +334,54 @@ func (p *EbayParser) parseAvailability(doc *goquery.Document) bool {
 
 	// * По умолчанию товар в наличии, если не найдено явных признаков отсутствия
 	return true
+}
+
+// * cleanAndParsePrice очищает строку цены и конвертирует в float32
+func cleanAndParsePrice(priceText string) (float32, error) {
+	priceText = strings.TrimSpace(priceText)
+
+	for _, r := range replacements {
+		priceText = strings.ReplaceAll(priceText, r, "")
+	}
+
+	priceText = strings.ReplaceAll(priceText, " ", "")
+	priceText = strings.ReplaceAll(priceText, "\n", "")
+	priceText = strings.ReplaceAll(priceText, "\t", "")
+
+	priceText = strings.ReplaceAll(priceText, ",", "")
+
+	priceText = strings.TrimSpace(priceText)
+
+	matches := reNumber.FindString(priceText)
+
+	if matches == "" {
+		return 0, fmt.Errorf("no valid number found in price text: '%s'", priceText)
+	}
+
+	priceFloat, err := strconv.ParseFloat(matches, 32)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse price '%s': %w", matches, err)
+	}
+
+	if priceFloat < 0.01 || priceFloat > 1000000 {
+		return 0, fmt.Errorf("price out of reasonable range: %.2f", priceFloat)
+	}
+
+	return float32(priceFloat), nil
+}
+
+// * containsPrice проверяет, содержит ли строка ценовую информацию
+func containsPrice(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+
+	if !reHasDigit.MatchString(text) {
+		return false
+	}
+
+	cleanText := strings.ReplaceAll(strings.ReplaceAll(text, " ", ""), ",", "")
+
+	return len(cleanText) > 20
 }
