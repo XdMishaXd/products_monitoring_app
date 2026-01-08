@@ -2,6 +2,7 @@ package deleteProduct
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	resp "main_service/internal/lib/api/response"
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
+	"main_service/internal/storage"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -69,6 +71,15 @@ func New(
 
 		err := prodOp.DeleteProduct(ctx, productID, userID)
 		if err != nil {
+			if errors.Is(err, storage.ErrProductNotFound) {
+				log.Info("Product not found")
+
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("Product not found"))
+
+				return
+			}
+
 			log.Error("Failed to delete product",
 				sl.Err(err),
 				slog.Int64("user_id", userID),

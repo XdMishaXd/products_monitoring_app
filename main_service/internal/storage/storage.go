@@ -8,5 +8,7 @@ const (
 
 var (
 	ErrProductAlreadyExists = errors.New("Product already exists")
-	ErrProductsNotFound     = errors.New("products not found")
+	ErrProductsNotFound     = errors.New("Products not found")
+	ErrProductNotFound      = errors.New("Product not found")
+	ErrParsingFailed        = errors.New("Failed to parse product")
 )

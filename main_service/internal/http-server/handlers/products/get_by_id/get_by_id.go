@@ -2,6 +2,7 @@ package getByID
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	sl "main_service/internal/lib/logger"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/models"
+	"main_service/internal/storage"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
@@ -71,6 +73,24 @@ func New(
 
 		product, err := prodOp.ProductByID(ctx, productID)
 		if err != nil {
+			if errors.Is(err, storage.ErrParsingFailed) {
+				log.Info("Failed to parse product")
+
+				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, resp.Error("Failed to parse product"))
+
+				return
+			}
+
+			if errors.Is(err, storage.ErrProductNotFound) {
+				log.Info("Product not found")
+
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("Product not found"))
+
+				return
+			}
+
 			log.Error("Failed to get product",
 				sl.Err(err),
 				slog.Int64("user_id", userID),

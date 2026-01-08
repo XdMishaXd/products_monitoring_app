@@ -79,7 +79,6 @@ func (r *PostgresRepo) SaveProduct(
 func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64) ([]models.Product, int64, error) {
 	const op = "storage.Postgres.Products"
 
-	// * Начинаем read-only транзакцию
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:   pgx.ReadCommitted,
 		AccessMode: pgx.ReadOnly,
@@ -93,7 +92,6 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 		}
 	}()
 
-	// * Получаем продукты
 	query := `
     SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
       FROM products
@@ -112,15 +110,15 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 		return nil, 0, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	// * Получаем count
 	var total int64
+
 	countQuery := `SELECT COUNT(*) FROM products WHERE user_id = $1`
+
 	err = tx.QueryRow(ctx, countQuery, userID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: count: %w", op, err)
 	}
 
-	// * Коммитим read-only транзакцию
 	if err := tx.Commit(ctx); err != nil {
 		return nil, 0, fmt.Errorf("%s: commit: %w", op, err)
 	}
@@ -153,8 +151,12 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 		&p.Updated_at,
 	)
 	if err != nil {
+		if p.Price == -1 {
+			return models.Product{}, storage.ErrParsingFailed
+		}
+
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Product{}, storage.ErrProductsNotFound
+			return models.Product{}, storage.ErrProductNotFound
 		}
 
 		return models.Product{}, fmt.Errorf("%s: failed to scan product: %w", op, err)
@@ -203,7 +205,7 @@ func (r *PostgresRepo) DeleteProduct(ctx context.Context, productID, userID int6
 	}
 
 	if cmd.RowsAffected() == 0 {
-		return storage.ErrProductsNotFound
+		return storage.ErrProductNotFound
 	}
 
 	return nil

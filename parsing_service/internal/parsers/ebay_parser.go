@@ -23,20 +23,6 @@ var (
 )
 
 var (
-	// JSON паттерны для поиска цены
-	rePriceJSON     = regexp.MustCompile(`"price":\s*"?([\d,\.]+)"?`)
-	reValueJSON     = regexp.MustCompile(`"value":\s*"?([\d,\.]+)"?`)
-	reLowPriceJSON  = regexp.MustCompile(`"lowPrice":\s*"?([\d,\.]+)"?`)
-	rePriceCurrency = regexp.MustCompile(`"priceCurrency":"[A-Z]{3}","price":"?([\d,\.]+)"?`)
-
-	// HTML паттерны с валютой
-	rePriceWithSymbol = regexp.MustCompile(`(?:US\s*)?[$€£]\s*([\d,]+\.?\d*)`)
-	reSymbolWithPrice = regexp.MustCompile(`([\d,]+\.?\d*)\s*(?:US\s*)?[$€£]`)
-
-	// Числовые паттерны около ключевых слов
-	rePriceKeyword = regexp.MustCompile(`(?i)price[^\d]*([\d,]+\.?\d*)`)
-	reCostKeyword  = regexp.MustCompile(`(?i)cost[^\d]*([\d,]+\.?\d*)`)
-
 	// Извлечение числа из очищенной строки
 	reNumber = regexp.MustCompile(`([\d]+\.?[\d]*)`)
 
@@ -46,24 +32,25 @@ var (
 
 var (
 	priceSelectors = []string{
-		// Новые селекторы для обновленной структуры eBay
+		"div.x-price-primary > span.ux-textspans",
 		"div.x-price-primary span.ux-textspans",
-		"div.x-price-primary .ux-textspans",
-		".x-price-primary [class*='ux-textspans']",
-		"[data-testid='x-price-primary'] span",
-		"[data-testid='x-price-primary'] .ux-textspans",
+		"[data-testid='x-price-primary'] > span.ux-textspans",
+		"[data-testid='x-price-primary'] span.ux-textspans",
+		".x-bin-price__content .x-price-primary span.ux-textspans",
+		".x-bin-price__content div[data-testid='x-price-primary'] span",
+	}
 
-		// Старые селекторы
-		".x-price-primary .ux-textspans--BOLD",
-		"div[data-testid='x-price-primary'] span",
+	oldSelectors = []string{
 		".mainPrice .ux-textspans",
 		"span[itemprop='price']",
-		".x-bin-price__content .ux-textspans",
+		".x-price-approx span.ux-textspans",
+		".x-price-section span.ux-textspans",
+	}
 
-		// Альтернативные селекторы
-		".x-price-approx span",
-		".x-price-section span",
-		"[class*='price'] [class*='textspans']",
+	priceContainers = []string{
+		"div.x-price-primary",
+		"[data-testid='x-price-primary']",
+		".x-bin-price__content",
 	}
 
 	metaSelectors = []string{
@@ -146,7 +133,7 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	}
 
 	// Парсим цену
-	price, err := p.parsePrice(doc, string(body))
+	price, err := p.parsePrice(doc)
 	if err != nil {
 		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -196,63 +183,52 @@ func (p *EbayParser) ParseWithRetry(
 }
 
 // * parsePrice извлекает цену из документа
-func (p *EbayParser) parsePrice(doc *goquery.Document, htmlText string) (float32, error) {
+func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 	var priceText string
+
 	for _, selector := range priceSelectors {
-		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
+		doc.Find(selector).First().Each(func(i int, s *goquery.Selection) {
 			text := strings.TrimSpace(s.Text())
-			if text != "" && containsPrice(text) {
+
+			if regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
 				priceText = text
-				return
 			}
 		})
+
 		if priceText != "" {
 			break
 		}
 	}
 
-	// * Поиск цены по regexp
 	if priceText == "" {
-		doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
-			jsonText := s.Text()
+		for _, container := range priceContainers {
+			doc.Find(container).First().Each(func(i int, s *goquery.Selection) {
+				text := strings.TrimSpace(s.Text())
 
-			regexps := []*regexp.Regexp{
-				rePriceJSON,
-				reValueJSON,
-				reLowPriceJSON,
-			}
-
-			for _, re := range regexps {
-				matches := re.FindStringSubmatch(jsonText)
-				if len(matches) > 1 {
-					priceText = matches[1]
-					return
+				if len(text) < 30 && regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
+					priceText = text
 				}
+			})
+
+			if priceText != "" {
+				break
 			}
-		})
+		}
 	}
 
 	// * Regex поиск в HTML
 	if priceText == "" {
-		regexps := []*regexp.Regexp{
-			rePriceJSON,
-			reValueJSON,
-			rePriceCurrency,
-			rePriceWithSymbol,
-			reSymbolWithPrice,
-			rePriceKeyword,
-			reCostKeyword,
-		}
+		for _, selector := range oldSelectors {
+			doc.Find(selector).First().Each(func(i int, s *goquery.Selection) {
+				text := strings.TrimSpace(s.Text())
 
-		for _, re := range regexps {
-			matches := re.FindStringSubmatch(htmlText)
-			if len(matches) > 1 {
-				candidate := matches[1]
-				// Проверяем, что это похоже на цену (не слишком большое число)
-				if len(strings.ReplaceAll(candidate, ",", "")) <= 10 {
-					priceText = candidate
-					break
+				if regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
+					priceText = text
 				}
+			})
+
+			if priceText != "" {
+				break
 			}
 		}
 	}
@@ -381,7 +357,18 @@ func containsPrice(text string) bool {
 		return false
 	}
 
-	cleanText := strings.ReplaceAll(strings.ReplaceAll(text, " ", ""), ",", "")
+	hasCurrency := strings.ContainsAny(text, "$€£¥")
+	hasKeyword := strings.Contains(strings.ToLower(text), "price") ||
+		strings.Contains(strings.ToLower(text), "cost")
 
-	return len(cleanText) > 20
+	if hasCurrency || hasKeyword {
+		return true
+	}
+
+	if len(text) <= 30 {
+		matched := reNumber.MatchString(text)
+		return matched
+	}
+
+	return false
 }
