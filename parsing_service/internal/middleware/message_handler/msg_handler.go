@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"parsing_service/internal/models"
-	"parsing_service/internal/parsers"
+	ebayParserDebug "parsing_service/internal/parsers/debug"
 	"parsing_service/internal/rabbitmq"
 )
 
 type MessageHandler struct {
 	log        *slog.Logger
 	producer   *rabbitmq.Producer
-	ebayParser *parsers.EbayParser
+	ebayParser *ebayParserDebug.EbayParser
 	// TODO: etsyParser       *parsers.EtsyParser
 	// TODO: aliexpressParser *parsers.AliexpressParser
 	maxRetries int
@@ -22,7 +22,7 @@ type MessageHandler struct {
 func New(
 	log *slog.Logger,
 	producer *rabbitmq.Producer,
-	ebayParser *parsers.EbayParser,
+	ebayParser *ebayParserDebug.EbayParser,
 	// etsyParser *parsers.EtsyParser,
 	// aliexpressParser *parsers.AliexpressParser,
 	maxReties int,

@@ -11,7 +11,7 @@ import (
 
 	"parsing_service/internal/config"
 	msgHandler "parsing_service/internal/middleware/message_handler"
-	"parsing_service/internal/parsers"
+	ebayParserDebug "parsing_service/internal/parsers/debug"
 	"parsing_service/internal/rabbitmq"
 )
 
@@ -50,7 +50,7 @@ func main() {
 		cfg.RabbitMQ.WorkerPoolSize,
 	)
 
-	ebayParser := parsers.NewEbayParser()
+	ebayParser := ebayParserDebug.NewEbayParser()
 
 	messageHandler := msgHandler.New(log, rabbitMQProducer, ebayParser, cfg.ParseRetries)
 

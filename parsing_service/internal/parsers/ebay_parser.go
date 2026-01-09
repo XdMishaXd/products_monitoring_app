@@ -23,34 +23,27 @@ var (
 )
 
 var (
-	// Извлечение числа из очищенной строки
-	reNumber = regexp.MustCompile(`([\d]+\.?[\d]*)`)
-
-	// Проверка наличия цифр
-	reHasDigit = regexp.MustCompile(`\d`)
+	numberPattern       = regexp.MustCompile(`(\d+\.?\d*)`)
+	exactPricePattern   = regexp.MustCompile(`^\$[\d,]+\.\d{2}$`)
+	extractPricePattern = regexp.MustCompile(`\$([\d,]+\.\d{2})`)
 )
 
 var (
 	priceSelectors = []string{
-		"div.x-price-primary > span.ux-textspans",
-		"div.x-price-primary span.ux-textspans",
-		"[data-testid='x-price-primary'] > span.ux-textspans",
-		"[data-testid='x-price-primary'] span.ux-textspans",
+		"div.x-price-primary[data-testid='x-price-primary'] span.ux-textspans",
+		"div[data-testid='x-price-primary'] span.ux-textspans",
 		".x-bin-price__content .x-price-primary span.ux-textspans",
-		".x-bin-price__content div[data-testid='x-price-primary'] span",
+		".x-price-primary span.ux-textspans",
+
+		"div.x-price-primary span",
+		"[data-testid='x-price-primary'] span",
 	}
 
 	oldSelectors = []string{
+		".mainPrice span.ux-textspans",
 		".mainPrice .ux-textspans",
 		"span[itemprop='price']",
-		".x-price-approx span.ux-textspans",
-		".x-price-section span.ux-textspans",
-	}
-
-	priceContainers = []string{
-		"div.x-price-primary",
-		"[data-testid='x-price-primary']",
-		".x-bin-price__content",
+		".x-price-approx span",
 	}
 
 	metaSelectors = []string{
@@ -101,8 +94,8 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	}
 
 	// * Заголовки для имитации браузера
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
@@ -110,7 +103,11 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
 	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
 	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("sec-ch-ua", `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -187,59 +184,54 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 	var priceText string
 
 	for _, selector := range priceSelectors {
-		doc.Find(selector).First().Each(func(i int, s *goquery.Selection) {
-			text := strings.TrimSpace(s.Text())
-
-			if regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
-				priceText = text
-			}
-		})
-
 		if priceText != "" {
 			break
 		}
-	}
 
-	if priceText == "" {
-		for _, container := range priceContainers {
-			doc.Find(container).First().Each(func(i int, s *goquery.Selection) {
-				text := strings.TrimSpace(s.Text())
-
-				if len(text) < 30 && regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
-					priceText = text
-				}
-			})
-
+		doc.Find(selector).Each(func(i int, s *goquery.Selection) {
 			if priceText != "" {
-				break
+				return
 			}
-		}
+
+			text := strings.TrimSpace(s.Text())
+
+			if exactPricePattern.MatchString(text) {
+				priceText = text
+			}
+		})
 	}
 
-	// * Regex поиск в HTML
 	if priceText == "" {
 		for _, selector := range oldSelectors {
-			doc.Find(selector).First().Each(func(i int, s *goquery.Selection) {
-				text := strings.TrimSpace(s.Text())
-
-				if regexp.MustCompile(`^\$[\d,]+\.\d{2}$`).MatchString(text) {
-					priceText = text
-				}
-			})
-
 			if priceText != "" {
 				break
+			}
+
+			s := doc.Find(selector).First()
+			if s.Length() > 0 {
+				text := strings.TrimSpace(s.Text())
+
+				if exactPricePattern.MatchString(text) {
+					priceText = text
+				} else if match := extractPricePattern.FindString(text); match != "" {
+					priceText = match
+				}
 			}
 		}
 	}
 
-	// Поиск meta тегов
 	if priceText == "" {
 		for _, selector := range metaSelectors {
 			if content, exists := doc.Find(selector).First().Attr("content"); exists {
-				if containsPrice(content) {
-					priceText = content
-					break
+				if strings.Contains(content, ".") {
+					testPrice := strings.ReplaceAll(content, ",", "")
+
+					if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
+						if price >= 0.01 && price <= 1000000 {
+							priceText = content
+							break
+						}
+					}
 				}
 			}
 		}
@@ -328,7 +320,7 @@ func cleanAndParsePrice(priceText string) (float32, error) {
 
 	priceText = strings.TrimSpace(priceText)
 
-	matches := reNumber.FindString(priceText)
+	matches := numberPattern.FindString(priceText)
 
 	if matches == "" {
 		return 0, fmt.Errorf("no valid number found in price text: '%s'", priceText)
@@ -344,31 +336,4 @@ func cleanAndParsePrice(priceText string) (float32, error) {
 	}
 
 	return float32(priceFloat), nil
-}
-
-// * containsPrice проверяет, содержит ли строка ценовую информацию
-func containsPrice(text string) bool {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return false
-	}
-
-	if !reHasDigit.MatchString(text) {
-		return false
-	}
-
-	hasCurrency := strings.ContainsAny(text, "$€£¥")
-	hasKeyword := strings.Contains(strings.ToLower(text), "price") ||
-		strings.Contains(strings.ToLower(text), "cost")
-
-	if hasCurrency || hasKeyword {
-		return true
-	}
-
-	if len(text) <= 30 {
-		matched := reNumber.MatchString(text)
-		return matched
-	}
-
-	return false
 }
