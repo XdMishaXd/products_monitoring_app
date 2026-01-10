@@ -16,6 +16,7 @@ import (
 	getByID "main_service/internal/http-server/handlers/products/get_by_id"
 	"main_service/internal/lib/jwt"
 	"main_service/internal/lib/parser"
+	"main_service/internal/lib/validators"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
 	"main_service/internal/rabbitmq"
@@ -120,6 +121,10 @@ func main() {
 	log.Info("parser started successfully")
 
 	requestValidator := validator.New()
+	if err := validators.RegisterProductURLValidator(requestValidator); err != nil {
+		log.Error("Failed to register product URL validator:", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	router := setupRouter(
 		log,
