@@ -80,7 +80,7 @@ func (r *RedisRepo) Product(ctx context.Context, productID int64) (models.Produc
 	return product, nil
 }
 
-// Close закрывает соединение с базой данных.
+// * Close закрывает соединение с базой данных.
 func (r *RedisRepo) Close() {
 	r.client.Close()
 }

@@ -6,58 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"parsing_service/internal/models"
+	"parsing_service/internal/parsers"
 
 	"github.com/PuerkitoBio/goquery"
-)
-
-var (
-	ErrProductNotFound = errors.New("product not found")
-	ErrPriceNotFound   = errors.New("price not found")
-	ErrInvalidURL      = errors.New("invalid URL")
-)
-
-var (
-	numberPattern       = regexp.MustCompile(`(\d+\.?\d*)`)
-	exactPricePattern   = regexp.MustCompile(`^\$[\d,]+\.\d{2}$`)
-	extractPricePattern = regexp.MustCompile(`\$([\d,]+\.\d{2})`)
-)
-
-var (
-	priceSelectors = []string{
-		"div.x-price-primary[data-testid='x-price-primary'] span.ux-textspans",
-		"div[data-testid='x-price-primary'] span.ux-textspans",
-		".x-bin-price__content .x-price-primary span.ux-textspans",
-		".x-price-primary span.ux-textspans",
-
-		"div.x-price-primary span",
-		"[data-testid='x-price-primary'] span",
-	}
-
-	oldSelectors = []string{
-		".mainPrice span.ux-textspans",
-		".mainPrice .ux-textspans",
-		"span[itemprop='price']",
-		".x-price-approx span",
-	}
-
-	metaSelectors = []string{
-		"meta[property='og:price:amount']",
-		"meta[property='product:price:amount']",
-		"meta[name='twitter:data1']",
-	}
-
-	replacements = []string{
-		"US", "EUR", "GBP", "USD",
-		"$", "€", "£", "¥",
-		"Price:", "price:", "PRICE:",
-		"approximately", "approx", "~",
-	}
 )
 
 type EbayParser struct {
@@ -71,8 +27,6 @@ func NewEbayParser() *EbayParser {
 			Transport: &http.Transport{
 				MaxIdleConns:        10,
 				IdleConnTimeout:     30 * time.Second,
-				DisableCompression:  false,
-				DisableKeepAlives:   false,
 				MaxIdleConnsPerHost: 10,
 			},
 		},
@@ -84,7 +38,7 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	const op = "parsers.EbayParser.Parse"
 
 	if !strings.Contains(product.URL, "ebay.com") {
-		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, ErrInvalidURL)
+		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, parsers.ErrInvalidURL)
 	}
 
 	// * Формирование запроса к ebay.com
@@ -97,17 +51,9 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
 	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("sec-ch-ua", `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -130,7 +76,7 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	}
 
 	// Парсим цену
-	price, err := p.parsePrice(doc)
+	price, err := p.parsePrice(doc, string(body))
 	if err != nil {
 		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, err)
 	}
@@ -162,7 +108,7 @@ func (p *EbayParser) ParseWithRetry(
 
 		lastErr = err
 
-		if errors.Is(err, ErrInvalidURL) || errors.Is(err, ErrProductNotFound) {
+		if errors.Is(err, parsers.ErrInvalidURL) || errors.Is(err, parsers.ErrProductNotFound) {
 			return nil, err
 		}
 
@@ -180,10 +126,10 @@ func (p *EbayParser) ParseWithRetry(
 }
 
 // * parsePrice извлекает цену из документа
-func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
+func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32, error) {
 	var priceText string
 
-	for _, selector := range priceSelectors {
+	for _, selector := range parsers.PriceSelectorsEbay {
 		if priceText != "" {
 			break
 		}
@@ -195,33 +141,68 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 
 			text := strings.TrimSpace(s.Text())
 
-			if exactPricePattern.MatchString(text) {
+			if parsers.ExactPricePatternEbay.MatchString(text) {
 				priceText = text
 			}
 		})
 	}
 
 	if priceText == "" {
-		for _, selector := range oldSelectors {
+		doc.Find("div.x-price-primary, [data-testid='x-price-primary']").Each(func(i int, s *goquery.Selection) {
 			if priceText != "" {
-				break
+				return
 			}
 
-			s := doc.Find(selector).First()
-			if s.Length() > 0 {
-				text := strings.TrimSpace(s.Text())
-
-				if exactPricePattern.MatchString(text) {
-					priceText = text
-				} else if match := extractPricePattern.FindString(text); match != "" {
-					priceText = match
-				}
+			text := strings.TrimSpace(s.Text())
+			if len(text) < 20 && parsers.ExactPricePatternEbay.MatchString(text) {
+				priceText = text
 			}
-		}
+		})
 	}
 
 	if priceText == "" {
-		for _, selector := range metaSelectors {
+		doc.Find("[data-testid*='price']").Each(func(i int, s *goquery.Selection) {
+			if priceText != "" {
+				return
+			}
+
+			text := strings.TrimSpace(s.Text())
+			if match := parsers.DataTestIDPriceEbay.FindString(text); match != "" {
+				testPrice := strings.ReplaceAll(strings.TrimPrefix(match, "$"), ",", "")
+
+				if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
+					if price >= 1.0 && price <= 100000 {
+						priceText = match
+					}
+				}
+			}
+		})
+	}
+
+	if priceText == "" {
+		doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
+			if priceText != "" {
+				return
+			}
+
+			jsonText := s.Text()
+
+			for _, pattern := range parsers.JsonPatternsEbay {
+				if matches := pattern.FindStringSubmatch(jsonText); len(matches) > 1 {
+					testPrice := strings.ReplaceAll(matches[1], ",", "")
+					if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
+						if price >= 0.01 && price <= 1000000 {
+							priceText = matches[1]
+							return
+						}
+					}
+				}
+			}
+		})
+	}
+
+	if priceText == "" {
+		for _, selector := range parsers.MetaSelectorsEbay {
 			if content, exists := doc.Find(selector).First().Attr("content"); exists {
 				if strings.Contains(content, ".") {
 					testPrice := strings.ReplaceAll(content, ",", "")
@@ -238,7 +219,40 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 	}
 
 	if priceText == "" {
-		return 0, ErrPriceNotFound
+		matches := parsers.ExtractPatternEbay.FindAllString(htmlBody, -1)
+
+		for _, match := range matches {
+			testPrice := strings.ReplaceAll(strings.TrimPrefix(match, "$"), ",", "")
+			if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
+				if price >= 1.0 && price <= 100000 {
+					priceText = match
+					break
+				}
+			}
+		}
+	}
+
+	if priceText == "" {
+		for _, selector := range parsers.OldSelectorsEbay {
+			if priceText != "" {
+				break
+			}
+
+			s := doc.Find(selector).First()
+			if s.Length() > 0 {
+				text := strings.TrimSpace(s.Text())
+
+				if parsers.ExactPricePatternEbay.MatchString(text) {
+					priceText = text
+				} else if match := parsers.ExtractPatternEbay.FindString(text); match != "" {
+					priceText = match
+				}
+			}
+		}
+	}
+
+	if priceText == "" {
+		return 0, parsers.ErrPriceNotFound
 	}
 
 	return cleanAndParsePrice(priceText)
@@ -246,61 +260,79 @@ func (p *EbayParser) parsePrice(doc *goquery.Document) (float32, error) {
 
 // * parseAvailability проверяет наличие товара
 func (p *EbayParser) parseAvailability(doc *goquery.Document) bool {
-	// * Индикаторы отсутствия товара
-	unavailableIndicators := []string{
-		"out of stock",
-		"sold out",
-		"unavailable",
-		"no longer available",
-		"this listing has ended",
-		"this item is out of stock",
-	}
+	for _, selector := range parsers.BuyButtonSelectorsEbay {
+		elements := doc.Find(selector)
 
-	pageText := strings.ToLower(doc.Text())
-
-	for _, indicator := range unavailableIndicators {
-		if strings.Contains(pageText, indicator) {
-			return false
+		if elements.Length() > 0 {
+			return true
 		}
 	}
 
-	// Проверка кнопок "Add to cart" и "Buy It Now"
-	buyButtonSelectors := []string{
-		"a[data-testid='ux-call-to-action']",
-		"a.ux-call-to-action",
-		".vim-btn-primary",
-		"[data-testid='x-atc-cta-btn']",
-	}
-
-	for _, selector := range buyButtonSelectors {
+	for _, selector := range parsers.QuantityInputSelectorsEbay {
 		if doc.Find(selector).Length() > 0 {
 			return true
 		}
 	}
 
-	// * Проверка количества доступных товаров
-	quantitySelectors := []string{
-		"span[data-testid='qtySubTxt'] span.ux-textspans--BOLD",
-		".qtyTxt .ux-textspans--BOLD",
-		".vi-qty-pur-lnk",
-	}
+	for _, selector := range parsers.AvailabilityContainersEbay {
+		element := doc.Find(selector).First()
+		if element.Length() > 0 {
+			text := strings.ToLower(strings.TrimSpace(element.Text()))
 
-	for _, selector := range quantitySelectors {
-		qtyText := doc.Find(selector).First().Text()
-
-		if qtyText != "" {
-			qtyText = strings.ToLower(strings.TrimSpace(qtyText))
-
-			if strings.Contains(qtyText, "available") ||
-				strings.Contains(qtyText, "left") ||
-				strings.Contains(qtyText, "in stock") {
-
+			// Проверяем позитивные индикаторы
+			if strings.Contains(text, "in stock") ||
+				strings.Contains(text, "available") ||
+				parsers.AvailabilityPatternEbay.MatchString(text) ||
+				parsers.MoreThanAvailabilityPatternEbay.MatchString(text) {
 				return true
+			}
+
+			// Проверяем негативные индикаторы ТОЛЬКО в этом контейнере
+			if strings.Contains(text, "out of stock") ||
+				strings.Contains(text, "sold out") ||
+				strings.Contains(text, "no longer available") {
+				return false
 			}
 		}
 	}
 
-	// * По умолчанию товар в наличии, если не найдено явных признаков отсутствия
+	for _, selector := range parsers.PriceContainersEbay {
+		element := doc.Find(selector).First()
+		if element.Length() > 0 {
+			text := strings.ToLower(strings.TrimSpace(element.Text()))
+
+			if strings.Contains(text, "out of stock") {
+				return false
+			}
+		}
+	}
+
+	title := strings.ToLower(doc.Find("title").Text())
+	if strings.Contains(title, "no longer available") ||
+		strings.Contains(title, "listing has ended") {
+		return false
+	}
+
+	pageText := strings.ToLower(doc.Text())
+
+	for _, indicator := range parsers.CriticalIndicatorsEbay {
+		if strings.Contains(pageText, indicator) {
+			return false
+		}
+	}
+
+	hasPositive := false
+	for _, indicator := range parsers.PositiveIndicatorsEbay {
+		if strings.Contains(pageText, indicator) {
+			hasPositive = true
+			break
+		}
+	}
+
+	if hasPositive {
+		return true
+	}
+
 	return true
 }
 
@@ -308,7 +340,7 @@ func (p *EbayParser) parseAvailability(doc *goquery.Document) bool {
 func cleanAndParsePrice(priceText string) (float32, error) {
 	priceText = strings.TrimSpace(priceText)
 
-	for _, r := range replacements {
+	for _, r := range parsers.ReplacementsEbay {
 		priceText = strings.ReplaceAll(priceText, r, "")
 	}
 
@@ -320,7 +352,7 @@ func cleanAndParsePrice(priceText string) (float32, error) {
 
 	priceText = strings.TrimSpace(priceText)
 
-	matches := numberPattern.FindString(priceText)
+	matches := parsers.NumberPatternEbay.FindString(priceText)
 
 	if matches == "" {
 		return 0, fmt.Errorf("no valid number found in price text: '%s'", priceText)
@@ -331,7 +363,7 @@ func cleanAndParsePrice(priceText string) (float32, error) {
 		return 0, fmt.Errorf("failed to parse price '%s': %w", matches, err)
 	}
 
-	if priceFloat < 0.01 || priceFloat > 1000000 {
+	if priceFloat < 0.01 || priceFloat > 10000000 {
 		return 0, fmt.Errorf("price out of reasonable range: %.2f", priceFloat)
 	}
 

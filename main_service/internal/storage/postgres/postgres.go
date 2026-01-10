@@ -95,7 +95,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 	query := `
     SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
       FROM products
-      WHERE user_id = $1
+      WHERE user_id = $1 AND price != -1
       ORDER BY created_at DESC
       LIMIT $2 OFFSET $3
   `
