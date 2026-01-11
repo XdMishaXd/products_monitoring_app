@@ -13,7 +13,9 @@ type PostgresStorage interface {
 		ctx context.Context,
 		productID int64,
 		price float32,
+		CurrencyID int,
 		inStock bool,
+		parsingError error,
 	) error
 }
 
@@ -48,6 +50,8 @@ func (p *Parser) handleMessage(ctx context.Context, body []byte) error {
 		ctx,
 		msg.ID,
 		msg.Price,
+		msg.CurrencyID,
 		msg.InStock,
+		msg.Err,
 	)
 }

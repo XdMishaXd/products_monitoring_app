@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -95,7 +96,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 	query := `
     SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
       FROM products
-      WHERE user_id = $1 AND price != -1
+      WHERE user_id = $1 AND price != -1 AND parsing_error IS NULL
       ORDER BY created_at DESC
       LIMIT $2 OFFSET $3
   `
@@ -166,19 +167,36 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 }
 
 // * UpdateParsedData добавляет информацию о цене и наличии продукта
-func (r *PostgresRepo) UpdateParsedData(ctx context.Context, productID int64, price float32, inStock bool) error {
+func (r *PostgresRepo) UpdateParsedData(
+	ctx context.Context,
+	productID int64,
+	price float32,
+	CurrencyID int,
+	inStock bool,
+	parsingError error,
+) error {
 	const op = "storage.postgres.UpdateParsedData"
 
 	const query = `
 		UPDATE products
 		SET price = $1,
 			in_stock = $2,
+			currency_id = $3,
+			parsing_error = $4,
 			last_checked = now(),
 			updated_at = now()
-		WHERE id = $3
+		WHERE id = $5
 	`
+	// Если parsing_error == nil, то в postgres пойдёт NULL
+	var errorMsg pgtype.Text
+	if parsingError != nil {
+		errorMsg = pgtype.Text{
+			String: parsingError.Error(),
+			Valid:  true,
+		}
+	}
 
-	cmd, err := r.pool.Exec(ctx, query, price, inStock, productID)
+	cmd, err := r.pool.Exec(ctx, query, price, inStock, CurrencyID, errorMsg, productID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

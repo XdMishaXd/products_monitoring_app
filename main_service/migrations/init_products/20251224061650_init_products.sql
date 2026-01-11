@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS products (
 	currency_id INT DEFAULT -1,
 	title TEXT NOT NULL,
 	price REAL DEFAULT -1,
+	parsing_error TEXT DEFAULT NULL,
 	in_stock BOOLEAN DEFAULT FALSE,
 	last_checked TIMESTAMPTZ,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -17,7 +18,7 @@ CREATE TABLE IF NOT EXISTS products (
     FOREIGN KEY (user_id)
     REFERENCES users(id)
     ON DELETE CASCADE
-		
+
 	CONSTRAINT fk_products_currency
     FOREIGN KEY (user_id)
     REFERENCES currencies(id)

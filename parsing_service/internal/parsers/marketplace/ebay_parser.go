@@ -82,9 +82,9 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 	}
 
 	info := &models.ParsedProduct{
-		ID:       product.ID,
-		Currency: currency,
-		Price:    price,
+		ID:         product.ID,
+		CurrencyID: models.CurrencyIDs[currency],
+		Price:      price,
 	}
 
 	// Парсим наличие
