@@ -75,15 +75,16 @@ func (p *EbayParser) Parse(ctx context.Context, product models.Product) (*models
 		return &models.ParsedProduct{}, fmt.Errorf("%s: failed to parse HTML: %w", op, err)
 	}
 
-	// Парсим цену
-	price, err := p.parsePrice(doc, string(body))
+	// Парсим цену и валюту
+	price, currency, err := p.parsePriceAndCurrency(doc, string(body))
 	if err != nil {
 		return &models.ParsedProduct{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	info := &models.ParsedProduct{
-		ID:    product.ID,
-		Price: price,
+		ID:       product.ID,
+		Currency: currency,
+		Price:    price,
 	}
 
 	// Парсим наличие
@@ -126,8 +127,9 @@ func (p *EbayParser) ParseWithRetry(
 }
 
 // * parsePrice извлекает цену из документа
-func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32, error) {
+func (p *EbayParser) parsePriceAndCurrency(doc *goquery.Document, htmlBody string) (float32, string, error) {
 	var priceText string
+	var currencyCode string
 
 	for _, selector := range parsers.PriceSelectorsEbay {
 		if priceText != "" {
@@ -143,6 +145,7 @@ func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32
 
 			if parsers.ExactPricePatternEbay.MatchString(text) {
 				priceText = text
+				currencyCode = parsers.ExtractCurrencyFromText(text)
 			}
 		})
 	}
@@ -156,8 +159,43 @@ func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32
 			text := strings.TrimSpace(s.Text())
 			if len(text) < 20 && parsers.ExactPricePatternEbay.MatchString(text) {
 				priceText = text
+				currencyCode = parsers.ExtractCurrencyFromText(text)
 			}
 		})
+	}
+
+	if priceText == "" {
+		doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
+			if priceText != "" {
+				return
+			}
+
+			jsonText := s.Text()
+
+			if currencyCode == "" {
+				if match := parsers.CurrencyCodePattern.FindStringSubmatch(jsonText); len(match) > 1 {
+					currencyCode = match[1]
+				}
+			}
+
+			for _, pattern := range parsers.JsonPatternsEbay {
+				if matches := pattern.FindStringSubmatch(jsonText); len(matches) > 1 {
+					testPrice := strings.ReplaceAll(matches[1], ",", "")
+					if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
+						if price >= 0.01 && price <= 1000000 {
+							priceText = matches[1]
+							return
+						}
+					}
+				}
+			}
+		})
+	}
+
+	if currencyCode == "" {
+		if content, exists := doc.Find("meta[property='product:price:currency']").First().Attr("content"); exists {
+			currencyCode = strings.ToUpper(strings.TrimSpace(content))
+		}
 	}
 
 	if priceText == "" {
@@ -173,27 +211,8 @@ func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32
 				if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
 					if price >= 1.0 && price <= 100000 {
 						priceText = match
-					}
-				}
-			}
-		})
-	}
-
-	if priceText == "" {
-		doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
-			if priceText != "" {
-				return
-			}
-
-			jsonText := s.Text()
-
-			for _, pattern := range parsers.JsonPatternsEbay {
-				if matches := pattern.FindStringSubmatch(jsonText); len(matches) > 1 {
-					testPrice := strings.ReplaceAll(matches[1], ",", "")
-					if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
-						if price >= 0.01 && price <= 1000000 {
-							priceText = matches[1]
-							return
+						if currencyCode == "" {
+							currencyCode = parsers.ExtractCurrencyFromText(text)
 						}
 					}
 				}
@@ -219,20 +238,6 @@ func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32
 	}
 
 	if priceText == "" {
-		matches := parsers.ExtractPatternEbay.FindAllString(htmlBody, -1)
-
-		for _, match := range matches {
-			testPrice := strings.ReplaceAll(strings.TrimPrefix(match, "$"), ",", "")
-			if price, err := strconv.ParseFloat(testPrice, 64); err == nil {
-				if price >= 1.0 && price <= 100000 {
-					priceText = match
-					break
-				}
-			}
-		}
-	}
-
-	if priceText == "" {
 		for _, selector := range parsers.OldSelectorsEbay {
 			if priceText != "" {
 				break
@@ -244,18 +249,28 @@ func (p *EbayParser) parsePrice(doc *goquery.Document, htmlBody string) (float32
 
 				if parsers.ExactPricePatternEbay.MatchString(text) {
 					priceText = text
-				} else if match := parsers.ExtractPatternEbay.FindString(text); match != "" {
-					priceText = match
+					if currencyCode == "" {
+						currencyCode = parsers.ExtractCurrencyFromText(text)
+					}
 				}
 			}
 		}
 	}
 
-	if priceText == "" {
-		return 0, parsers.ErrPriceNotFound
+	if currencyCode == "" {
+		currencyCode = parsers.DetectCurrencyByDomain(htmlBody)
 	}
 
-	return cleanAndParsePrice(priceText)
+	if currencyCode == "" {
+		currencyCode = "USD"
+	}
+
+	price, err := cleanAndParsePrice(priceText)
+	if err != nil {
+		return 0, "", err
+	}
+
+	return price, currencyCode, nil
 }
 
 // * parseAvailability проверяет наличие товара

@@ -3,6 +3,32 @@ package parsers
 import (
 	"errors"
 	"regexp"
+	"strings"
+)
+
+const (
+	CurrencyUSD = "USD" // Доллар США
+	CurrencyEUR = "EUR" // Евро
+	CurrencyGBP = "GBP" // Фунт стерлингов
+	CurrencyJPY = "JPY" // Японская иена
+	CurrencyCNY = "CNY" // Китайский юань
+	CurrencyRUB = "RUB" // Российский рубль
+	CurrencyMDL = "MDL" // Молдавский лей
+)
+
+var CurrencySymbolMap = map[string]string{
+	"$":   "USD",
+	"€":   "EUR",
+	"£":   "GBP",
+	"¥":   "JPY",
+	"₽":   "RUB",
+	"lei": "MDL",
+	"L":   "MDL",
+}
+
+var (
+	CurrencyCodePattern = regexp.MustCompile(`"priceCurrency"\s*:\s*"([A-Z]{3})"`)
+	CurrencyTextPattern = regexp.MustCompile(`\b(USD|EUR|GBP|JPY|CNY|RUB|MDL)\b`)
 )
 
 var (
@@ -16,7 +42,6 @@ var (
 	NumberPatternEbay               = regexp.MustCompile(`(\d+\.?\d*)`)
 	ExactPricePatternEbay           = regexp.MustCompile(`^\$[\d,]+\.\d{2}$`)
 	ExtractPricePatternEbay         = regexp.MustCompile(`\$([\d,]+\.\d{2})`)
-	ExtractPatternEbay              = regexp.MustCompile(`\$([\d,]+\.\d{2})`)
 	DataTestIDPriceEbay             = regexp.MustCompile(`\$([\d,]+\.\d{2})`)
 	AvailabilityPatternEbay         = regexp.MustCompile(`\d+\s*available`)
 	MoreThanAvailabilityPatternEbay = regexp.MustCompile(`more than \d+ available`)
@@ -102,3 +127,51 @@ var (
 		regexp.MustCompile(`"lowPrice"\s*:\s*"?([\d,]+\.?\d*)"?`),
 	}
 )
+
+// * extractCurrencyFromText извлекает валюту из текста
+func ExtractCurrencyFromText(text string) string {
+	// Проверяем символы валют
+	for symbol, code := range CurrencySymbolMap {
+		if strings.Contains(text, symbol) {
+			return code
+		}
+	}
+
+	// Проверяем текстовые коды валют
+	if match := CurrencyTextPattern.FindString(text); match != "" {
+		return match
+	}
+
+	return ""
+}
+
+// * detectCurrencyByDomain определяет валюту по домену или содержимому страницы
+func DetectCurrencyByDomain(htmlBody string) string {
+	lowerBody := strings.ToLower(htmlBody)
+
+	currencyMentions := map[string]int{
+		"usd": 0,
+		"eur": 0,
+		"gbp": 0,
+		"jpy": 0,
+		"cny": 0,
+		"rub": 0,
+		"mdl": 0,
+	}
+
+	for currency := range currencyMentions {
+		currencyMentions[currency] = strings.Count(lowerBody, currency)
+	}
+
+	maxCount := 0
+	detectedCurrency := "USD"
+
+	for currency, count := range currencyMentions {
+		if count > maxCount {
+			maxCount = count
+			detectedCurrency = strings.ToUpper(currency)
+		}
+	}
+
+	return detectedCurrency
+}

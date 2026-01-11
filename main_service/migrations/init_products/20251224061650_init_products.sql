@@ -1,10 +1,11 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
 	id BIGSERIAL PRIMARY KEY,
 	user_id BIGINT NOT NULL,
 	url TEXT NOT NULL,
 	marketplace TEXT NOT NULL,
+	currency_id INT DEFAULT -1,
 	title TEXT NOT NULL,
 	price REAL DEFAULT -1,
 	in_stock BOOLEAN DEFAULT FALSE,
@@ -15,6 +16,11 @@ CREATE TABLE products (
 	CONSTRAINT fk_products_user
     FOREIGN KEY (user_id)
     REFERENCES users(id)
+    ON DELETE CASCADE
+		
+	CONSTRAINT fk_products_currency
+    FOREIGN KEY (user_id)
+    REFERENCES currencies(id)
     ON DELETE CASCADE
 );
 

@@ -30,6 +30,7 @@ type ProductForProducer struct {
 type ParsedProduct struct {
 	ID       int64   `json:"id"`
 	Price    float32 `json:"price"`
-	In_stock bool    `json:"in_stock"`
+	Currency string  `json:"currency"`
+	InStock  bool    `json:"in_stock"`
 	Err      error   `json:"err"`
 }

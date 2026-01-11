@@ -152,7 +152,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 	)
 	if err != nil {
 		if p.Price == -1 {
-			return models.Product{}, storage.ErrParsingFailed
+			return models.Product{}, storage.ErrParsedProductNotYetRecieved
 		}
 
 		if errors.Is(err, pgx.ErrNoRows) {

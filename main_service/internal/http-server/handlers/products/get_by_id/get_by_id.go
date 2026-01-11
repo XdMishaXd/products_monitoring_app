@@ -73,11 +73,11 @@ func New(
 
 		product, err := prodOp.ProductByID(ctx, productID)
 		if err != nil {
-			if errors.Is(err, storage.ErrParsingFailed) {
-				log.Info("Failed to parse product")
+			if errors.Is(err, storage.ErrParsedProductNotYetRecieved) {
+				log.Info("Product not yet received")
 
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("Failed to parse product"))
+				render.Status(r, http.StatusConflict)
+				render.JSON(w, r, resp.Error("Product not yet received"))
 
 				return
 			}

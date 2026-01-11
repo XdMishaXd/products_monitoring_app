@@ -48,6 +48,6 @@ func (p *Parser) handleMessage(ctx context.Context, body []byte) error {
 		ctx,
 		msg.ID,
 		msg.Price,
-		msg.In_stock,
+		msg.InStock,
 	)
 }

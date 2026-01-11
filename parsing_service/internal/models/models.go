@@ -15,8 +15,9 @@ type Product struct {
 }
 
 type ParsedProduct struct {
-	ID      int64   `json:"id"`
-	Price   float32 `json:"price"`
-	InStock bool    `json:"in_stock"`
-	Err     error   `json:"err"`
+	ID       int64   `json:"id"`
+	Price    float32 `json:"price"`
+	Currency string  `json:"currency"`
+	InStock  bool    `json:"in_stock"`
+	Err      error   `json:"err"`
 }
