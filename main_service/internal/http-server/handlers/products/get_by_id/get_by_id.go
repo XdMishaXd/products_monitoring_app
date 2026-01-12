@@ -82,6 +82,15 @@ func New(
 				return
 			}
 
+			if errors.Is(err, storage.ErrParsingFailed) {
+				log.Info("Failed to parse product")
+
+				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, resp.Error("Parsing error"))
+
+				return
+			}
+
 			if errors.Is(err, storage.ErrProductNotFound) {
 				log.Info("Product not found")
 

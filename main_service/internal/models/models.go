@@ -11,14 +11,15 @@ const (
 )
 
 type Product struct {
-	ID           int64       `json:"id"`
-	Title        string      `json:"title"`
-	Marketplace  Marketplace `json:"marketplace"`
-	Price        float32     `json:"price"`
-	In_stock     bool        `json:"in_stock"`
-	Last_checked time.Time   `json:"last_checked"`
-	Created_at   time.Time   `json:"created_at"`
-	Updated_at   time.Time   `json:"updated_at"`
+	ID          int64       `json:"id"`
+	Title       string      `json:"title"`
+	Marketplace Marketplace `json:"marketplace"`
+	Price       float32     `json:"price"`
+	Currency    string      `json:"currency"`
+	InStock     bool        `json:"in_stock"`
+	LastChecked time.Time   `json:"last_checked"`
+	Created_at  time.Time   `json:"created_at"`
+	Updated_at  time.Time   `json:"updated_at"`
 }
 
 type ProductForProducer struct {

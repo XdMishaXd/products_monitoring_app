@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS currencies (
 	id SERIAL PRIMARY KEY,
-	code VARCHAR(3) UNIQUE NOT NULL,
+	code VARCHAR(3) UNIQUE NOT NULL
 );
 
 INSERT INTO currencies (code) VALUES

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS products (
 	user_id BIGINT NOT NULL,
 	url TEXT NOT NULL,
 	marketplace TEXT NOT NULL,
-	currency_id INT DEFAULT -1,
+	currency_id INT DEFAULT NULL,
 	title TEXT NOT NULL,
 	price REAL DEFAULT -1,
 	parsing_error TEXT DEFAULT NULL,
@@ -17,10 +17,10 @@ CREATE TABLE IF NOT EXISTS products (
 	CONSTRAINT fk_products_user
     FOREIGN KEY (user_id)
     REFERENCES users(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
 
 	CONSTRAINT fk_products_currency
-    FOREIGN KEY (user_id)
+    FOREIGN KEY (currency_id)
     REFERENCES currencies(id)
     ON DELETE CASCADE
 );

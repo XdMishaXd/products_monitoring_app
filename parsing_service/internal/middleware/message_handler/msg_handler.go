@@ -92,13 +92,15 @@ func (h *MessageHandler) Handle(ctx context.Context, product models.Product) err
 		slog.Int64("product_id", product.ID),
 		slog.Float64("price", float64(info.Price)),
 		slog.Bool("in_stock", info.InStock),
+		slog.Int("currency_id", info.CurrencyID),
 	)
 
 	resultMsg := &models.ParsedProduct{
-		ID:      product.ID,
-		Price:   info.Price,
-		InStock: info.InStock,
-		Err:     nil,
+		ID:         product.ID,
+		Price:      info.Price,
+		CurrencyID: info.CurrencyID,
+		InStock:    info.InStock,
+		Err:        nil,
 	}
 
 	if err := h.producer.PublishJSON(ctx, resultMsg); err != nil {

@@ -94,11 +94,15 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 	}()
 
 	query := `
-    SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
-      FROM products
-      WHERE user_id = $1 AND price != -1 AND parsing_error IS NULL
-      ORDER BY created_at DESC
-      LIMIT $2 OFFSET $3
+    SELECT p.id, p.title, p.marketplace, p.price, c.code AS currency, p.in_stock,
+    p.last_checked, p.created_at, p.updated_at
+		FROM products p
+		JOIN currencies c ON p.currency_id = c.id
+		WHERE p.user_id = $1
+		AND p.price != -1
+		AND p.parsing_error IS NULL
+		ORDER BY p.created_at DESC
+		LIMIT $2 OFFSET $3;
   `
 
 	rows, err := tx.Query(ctx, query, userID, limit, offset)
@@ -132,13 +136,16 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 	const op = "storage.postgres.ProductByID"
 
 	const query = `
-		SELECT id, title, marketplace, price, in_stock, last_checked, created_at, updated_at
-		FROM products
-		WHERE id = $1
+		SELECT p.id, p.title, p.marketplace, p.price, c.code, 
+		p.in_stock, p.last_checked, p.created_at, p.updated_at, p.parsing_error
+		FROM products p
+		JOIN currencies c ON p.currency_id = c.id
+		WHERE p.id = $1
 	`
 
 	row := r.pool.QueryRow(ctx, query, productID)
 
+	var parsingErr pgtype.Text
 	var p models.Product
 
 	err := row.Scan(
@@ -146,14 +153,20 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 		&p.Title,
 		&p.Marketplace,
 		&p.Price,
-		&p.In_stock,
-		&p.Last_checked,
+		&p.Currency,
+		&p.InStock,
+		&p.LastChecked,
 		&p.Created_at,
 		&p.Updated_at,
+		&parsingErr,
 	)
 	if err != nil {
 		if p.Price == -1 {
 			return models.Product{}, storage.ErrParsedProductNotYetRecieved
+		}
+
+		if !parsingErr.Valid || parsingErr.String != "" {
+			return models.Product{}, storage.ErrParsingFailed
 		}
 
 		if errors.Is(err, pgx.ErrNoRows) {
