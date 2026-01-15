@@ -17,7 +17,6 @@ type Product struct {
 	Price       float32     `json:"price"`
 	Currency    string      `json:"currency"`
 	InStock     bool        `json:"in_stock"`
-	LastChecked time.Time   `json:"last_checked"`
 	Created_at  time.Time   `json:"created_at"`
 	Updated_at  time.Time   `json:"updated_at"`
 }

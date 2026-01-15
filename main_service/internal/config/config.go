@@ -9,13 +9,14 @@ import (
 )
 
 type Config struct {
-	Env           string        `yaml:"env" env-default:"local"`
-	JWTSecret     string        `yaml:"jwt_secret" env-required:"true"`
-	CheckInterval time.Duration `yaml:"check_interval" env-default:"30m"`
-	RabbitMQ      `yaml:"rabbitmq"`
-	Postgres      `yaml:"postgres"`
-	HTTPServer    `yaml:"http_server"`
-	Redis         `yaml:"redis"`
+	Env              string        `yaml:"env" env-default:"local"`
+	JWTSecret        string        `yaml:"jwt_secret" env-required:"true"`
+	CheckInterval    time.Duration `yaml:"check_interval" env-default:"30m"`
+	ParsingBatchSize int           `yaml:"parsing_batch_size" env-default:"10"`
+	RabbitMQ         `yaml:"rabbitmq"`
+	Postgres         `yaml:"postgres"`
+	HTTPServer       `yaml:"http_server"`
+	Redis            `yaml:"redis"`
 }
 
 type HTTPServer struct {

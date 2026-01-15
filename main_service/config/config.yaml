@@ -6,7 +6,9 @@ http_server:
   idle_timeout: 30s
 
 jwt_secret: "super-secret-key"
+
 check_interval: 30m
+parsing_batch_size: 10
 
 redis:
   db: 0

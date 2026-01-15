@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS products (
 	price REAL DEFAULT -1,
 	parsing_error TEXT DEFAULT NULL,
 	in_stock BOOLEAN DEFAULT FALSE,
-	last_checked TIMESTAMPTZ,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -25,18 +24,39 @@ CREATE TABLE IF NOT EXISTS products (
     ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX uniq_products_user_url
-ON products (user_id, url);
+-- Уникальный индекс для предотвращения дубликатов
+CREATE UNIQUE INDEX uniq_products_user_url 
+	ON products (user_id, url);
 
-CREATE INDEX idx_products_user_id
-  ON products(user_id);
+-- Индекс для быстрого поиска продуктов пользователя
+CREATE INDEX idx_products_user_id 
+	ON products(user_id);
 
+-- Частичный индекс для товаров в наличии
 CREATE INDEX idx_products_in_stock
 	ON products(in_stock)
 	WHERE in_stock = true;
+
+-- Индекс для быстрого поиска продуктов для парсинга
+CREATE INDEX idx_products_updated_at 
+	ON products(updated_at ASC);
+
+-- Составной индекс для оптимизации запросов с фильтрацией по user_id и сортировкой по created_at
+CREATE INDEX idx_products_user_created 
+	ON products(user_id, created_at DESC);
+
+-- Индекс для фильтрации по маркетплейсу
+CREATE INDEX idx_products_marketplace 
+	ON products(marketplace);
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE products IF EXISTS;
+DROP INDEX IF EXISTS idx_products_marketplace;
+DROP INDEX IF EXISTS idx_products_user_created;
+DROP INDEX IF EXISTS idx_products_updated_at;
+DROP INDEX IF EXISTS idx_products_in_stock;
+DROP INDEX IF EXISTS idx_products_user_id;
+DROP INDEX IF EXISTS uniq_products_user_url;
+DROP TABLE IF EXISTS products;
 -- +goose StatementEnd

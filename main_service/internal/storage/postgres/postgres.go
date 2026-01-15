@@ -95,7 +95,7 @@ func (r *PostgresRepo) Products(ctx context.Context, userID, limit, offset int64
 
 	query := `
     SELECT p.id, p.title, p.marketplace, p.price, c.code AS currency, p.in_stock,
-    p.last_checked, p.created_at, p.updated_at
+    p.created_at, p.updated_at
 		FROM products p
 		JOIN currencies c ON p.currency_id = c.id
 		WHERE p.user_id = $1
@@ -137,7 +137,7 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 
 	const query = `
 		SELECT p.id, p.title, p.marketplace, p.price, c.code, 
-		p.in_stock, p.last_checked, p.created_at, p.updated_at, p.parsing_error
+		p.in_stock, p.created_at, p.updated_at, p.parsing_error
 		FROM products p
 		JOIN currencies c ON p.currency_id = c.id
 		WHERE p.id = $1
@@ -155,7 +155,6 @@ func (r *PostgresRepo) ProductByID(ctx context.Context, productID int64) (models
 		&p.Price,
 		&p.Currency,
 		&p.InStock,
-		&p.LastChecked,
 		&p.Created_at,
 		&p.Updated_at,
 		&parsingErr,
@@ -196,7 +195,6 @@ func (r *PostgresRepo) UpdateParsedData(
 			in_stock = $2,
 			currency_id = $3,
 			parsing_error = $4,
-			last_checked = now(),
 			updated_at = now()
 		WHERE id = $5
 	`
@@ -219,6 +217,31 @@ func (r *PostgresRepo) UpdateParsedData(
 	}
 
 	return nil
+}
+
+// * GetProductsForParsing возвращает продукты для парсинга (не обновлялись >= 30 минут)
+func (r *PostgresRepo) GetProductsForParsing(ctx context.Context, limit int) ([]models.ProductForProducer, error) {
+	const op = "storage.postgres.GetProductsForParsing"
+
+	const query = `
+		SELECT id, url, marketplace 
+		FROM products
+		WHERE updated_at <= NOW() - INTERVAL '30 minutes'
+		ORDER BY updated_at ASC
+		LIMIT $1
+	`
+
+	rows, err := r.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+
+	products, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.ProductForProducer])
+	if err != nil {
+		return nil, fmt.Errorf("%s: collect: %w", op, err)
+	}
+
+	return products, nil
 }
 
 // * DeleteProduct удаляет продукт по productID и userID

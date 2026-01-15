@@ -105,11 +105,22 @@ func main() {
 	}
 
 	prodOP := products.New(
+		log,
 		postgresClient,
 		redisClient,
 		rabbitMQProducer,
 		cfg.CheckInterval,
+		cfg.ParsingBatchSize,
 	)
+
+	log.Info("starting periodic product parsing")
+	go func() {
+		if err := prodOP.RunPeriodicParsing(ctx); err != nil && err != context.Canceled {
+			log.Error("periodic parsing stopped with error",
+				slog.String("error", err.Error()),
+			)
+		}
+	}()
 
 	parserClient := parser.New(postgresClient, rabbitMQConsumer)
 
