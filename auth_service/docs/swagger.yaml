@@ -113,7 +113,7 @@ paths:
             type: object
       summary: Аутентификация пользователя
       tags:
-      - Auth
+      - auth
       x-order: 1
   /auth/logout:
     post:

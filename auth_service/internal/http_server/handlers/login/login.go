@@ -52,7 +52,7 @@ type Response struct {
 // @Description  - `403` - Email не подтвержден
 // @Description  - `404` - Пользователь или приложение не найдены
 // @Description  - `500` - Внутренняя ошибка сервера
-// @Tags         Auth
+// @Tags         auth
 // @Accept       json
 // @Produce      json
 // @Param        credentials  body  object{email=string,password=string,app_id=int}  true  "Данные для входа"  example({"email": "user@example.com", "password": "SecurePass123!", "app_id": 1})
