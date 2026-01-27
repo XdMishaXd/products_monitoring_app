@@ -1,5 +1,10 @@
 env: "prod" # local, dev, prod 
 
+swagger:
+  username: "admin"
+  password: "admin"
+  enabled: true
+
 tokens:
   access_token_ttl: 1h
   refresh_token_ttl: 168h
