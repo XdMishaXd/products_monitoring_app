@@ -14,7 +14,7 @@ type MessageHandler struct {
 	log        *slog.Logger
 	producer   *rabbitmq.Producer
 	ebayParser *parsers.EbayParser
-	// TODO: etsyParser       *parsers.EtsyParser
+	etsyParser *parsers.EtsyParser
 	// TODO: aliexpressParser *parsers.AliexpressParser
 	maxRetries int
 }
@@ -23,7 +23,7 @@ func New(
 	log *slog.Logger,
 	producer *rabbitmq.Producer,
 	ebayParser *parsers.EbayParser,
-	// etsyParser *parsers.EtsyParser,
+	etsyParser *parsers.EtsyParser,
 	// aliexpressParser *parsers.AliexpressParser,
 	maxReties int,
 ) *MessageHandler {
@@ -31,7 +31,7 @@ func New(
 		log:        log,
 		producer:   producer,
 		ebayParser: ebayParser,
-		// etsyParser:       etsyParser,
+		etsyParser: etsyParser,
 		// aliexpressParser: aliexpressParser,
 		maxRetries: maxReties,
 	}
@@ -54,10 +54,10 @@ func (h *MessageHandler) Handle(ctx context.Context, product models.Product) err
 	switch product.Marketplace {
 	case "ebay":
 		info, err = h.ebayParser.ParseWithRetry(parseCtx, product, h.maxRetries)
-	// case "etsy":
-	// 	info, err = h.etsyParser.ParseWithRetry(parseCtx, product.URL, h.maxRetries)
+	case "etsy":
+		info, err = h.etsyParser.ParseWithRetry(parseCtx, product, h.maxRetries)
 	// case "aliexpress":
-	// 	info, err = h.aliexpressParser.ParseWithRetry(parseCtx, product.URL, h.maxRetries)
+	// 	info, err = h.aliexpressParser.ParseWithRetry(parseCtx, product, h.maxRetries)
 	default:
 		h.log.Error("unknown marketplace",
 			slog.String("marketplace", string(product.Marketplace)),

@@ -51,8 +51,15 @@ func main() {
 	)
 
 	ebayParser := parsers.NewEbayParser()
+	etsyParser := parsers.NewEtsyParser()
 
-	messageHandler := msgHandler.New(log, rabbitMQProducer, ebayParser, cfg.ParseRetries)
+	messageHandler := msgHandler.New(
+		log,
+		rabbitMQProducer,
+		ebayParser,
+		etsyParser,
+		cfg.ParseRetries,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

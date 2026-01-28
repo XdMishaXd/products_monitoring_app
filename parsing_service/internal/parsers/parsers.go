@@ -128,6 +128,111 @@ var (
 	}
 )
 
+// * variables for etsy
+var (
+	NumberPatternEtsy            = regexp.MustCompile(`(\d+\.?\d*)`)
+	PricePatternEtsy             = regexp.MustCompile(`[$€£¥₽]\s*[\d,]+\.?\d{0,2}`)
+	QuantityAvailablePatternEtsy = regexp.MustCompile(`\d+\s*(?:in stock|available)`)
+	OnlyFewLeftPatternEtsy       = regexp.MustCompile(`only \d+ left`)
+)
+
+var (
+	// Основные селекторы цены Etsy
+	PriceSelectorsEtsy = []string{
+		"p[data-buy-box-region='price']",
+		"div[data-buy-box-region='price']",
+		"p.wt-text-title-03",
+		".listing-page-price",
+		"[data-price-container] p",
+		"div.listing-page-price p",
+		".wt-text-title-03",
+		"p[class*='price']",
+	}
+
+	// Старые селекторы (для обратной совместимости)
+	OldSelectorsEtsy = []string{
+		"span.currency-value",
+		"p.text-largest",
+		"span[itemprop='price']",
+		".price-display",
+	}
+
+	// Meta теги для извлечения цены
+	MetaSelectorsEtsy = []string{
+		"meta[property='og:price:amount']",
+		"meta[property='product:price:amount']",
+		"meta[name='twitter:data1']",
+		"meta[property='etsymarketplace:price']",
+	}
+
+	// Паттерны для JSON-LD
+	JsonPatternsEtsy = []*regexp.Regexp{
+		regexp.MustCompile(`"price"\s*:\s*"?([\d,]+\.?\d*)"?`),
+		regexp.MustCompile(`"value"\s*:\s*"?([\d,]+\.?\d*)"?`),
+		regexp.MustCompile(`"amount"\s*:\s*"?([\d,]+\.?\d*)"?`),
+		regexp.MustCompile(`"lowPrice"\s*:\s*"?([\d,]+\.?\d*)"?`),
+		regexp.MustCompile(`"price_usd"\s*:\s*"?([\d,]+\.?\d*)"?`),
+	}
+
+	// Замены для очистки цены
+	ReplacementsEtsy = []string{
+		"US", "EUR", "GBP", "USD", "CAD", "AUD",
+		"$", "€", "£", "¥", "₽",
+		"Price:", "price:", "PRICE:",
+		"From", "from", "FROM",
+		"Sale price", "Original price",
+	}
+
+	// Селекторы кнопки "Add to cart"
+	AddToCartSelectorsEtsy = []string{
+		"button[data-buy-box-region='add-to-cart']",
+		"button[aria-label*='Add to cart']",
+		"button.add-to-cart-button",
+		".add-to-cart-btn",
+		"button[type='submit'][name='add_to_cart']",
+		"button:contains('Add to cart')",
+		"button:contains('Add to bag')",
+	}
+
+	// Селекторы поля количества
+	QuantitySelectorsEtsy = []string{
+		"select[name='quantity']",
+		"input[name='quantity']",
+		"select[aria-label*='Quantity']",
+		"input[aria-label*='Quantity']",
+		"[data-selector='quantity-select']",
+	}
+
+	// Селекторы контейнеров с информацией о наличии
+	AvailabilitySelectorsEtsy = []string{
+		"[data-buy-box-region='quantity']",
+		".wt-display-flex-xs.wt-align-items-center",
+		".listing-page-availability",
+		"p[class*='availability']",
+		".inventory-message",
+	}
+
+	// Критические индикаторы отсутствия товара
+	CriticalIndicatorsEtsy = []string{
+		"this item is no longer available",
+		"this listing has been removed",
+		"no longer available",
+		"item unavailable",
+		"listing not found",
+	}
+
+	// Позитивные индикаторы наличия товара
+	PositiveIndicatorsEtsy = []string{
+		"add to cart",
+		"add to bag",
+		"buy now",
+		"in stock",
+		"available",
+		"ready to ship",
+		"made to order",
+	}
+)
+
 // * extractCurrencyFromText извлекает валюту из текста
 func ExtractCurrencyFromText(text string) string {
 	// Проверяем символы валют

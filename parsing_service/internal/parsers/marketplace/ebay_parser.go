@@ -265,7 +265,7 @@ func (p *EbayParser) parsePriceAndCurrency(doc *goquery.Document, htmlBody strin
 		currencyCode = "USD"
 	}
 
-	price, err := cleanAndParsePrice(priceText)
+	price, err := cleanAndParsePriceEbay(priceText)
 	if err != nil {
 		return 0, "", err
 	}
@@ -352,7 +352,7 @@ func (p *EbayParser) parseAvailability(doc *goquery.Document) bool {
 }
 
 // * cleanAndParsePrice очищает строку цены и конвертирует в float32
-func cleanAndParsePrice(priceText string) (float32, error) {
+func cleanAndParsePriceEbay(priceText string) (float32, error) {
 	priceText = strings.TrimSpace(priceText)
 
 	for _, r := range parsers.ReplacementsEbay {
