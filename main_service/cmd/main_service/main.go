@@ -19,6 +19,7 @@ import (
 	"main_service/internal/lib/validators"
 	authMiddlware "main_service/internal/middleware/auth"
 	"main_service/internal/middleware/products"
+	swaggerAuth "main_service/internal/middleware/swagger-auth"
 	"main_service/internal/rabbitmq"
 	"main_service/internal/storage/postgres"
 	"main_service/internal/storage/redis"
@@ -26,7 +27,16 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-playground/validator/v10"
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	_ "main_service/docs"
 )
+
+// @title           Products monitoring service API
+// @version         1.0
+// @description     Сервис мониторинга товаров
+// @host            localhost:8080
+// @BasePath        /
 
 const (
 	envLocal = "local"
@@ -139,6 +149,7 @@ func main() {
 
 	router := setupRouter(
 		log,
+		cfg,
 		requestValidator,
 		postgresClient,
 		prodOP,
@@ -194,6 +205,7 @@ func main() {
 
 func setupRouter(
 	log *slog.Logger,
+	cfg *config.Config,
 	validate *validator.Validate,
 	postgres *postgres.PostgresRepo,
 	prodOP *products.ProductOperator,
@@ -201,7 +213,6 @@ func setupRouter(
 ) *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Use(authMiddlware.New(log, jwtParser))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -209,10 +220,21 @@ func setupRouter(
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(middleware.Compress(5))
 
-	r.Post("/product", addProduct.New(log, prodOP, validate))
-	r.Get("/products", getProducts.New(log, postgres))
-	r.Get("/product", getByID.New(log, prodOP))
-	r.Delete("/product", deleteProduct.New(log, postgres))
+	if cfg.Swagger.Enabled {
+		r.Group(func(r chi.Router) {
+			r.Use(swaggerAuth.New(cfg.Swagger.Username, cfg.Swagger.Password))
+			r.Get("/swagger/*", httpSwagger.WrapHandler)
+		})
+	}
+
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddlware.New(log, jwtParser))
+
+		r.Post("/product/add", addProduct.New(log, prodOP, validate))
+		r.Get("/products", getProducts.New(log, postgres))
+		r.Get("/product", getByID.New(log, prodOP))
+		r.Delete("/product", deleteProduct.New(log, postgres))
+	})
 
 	return r
 }

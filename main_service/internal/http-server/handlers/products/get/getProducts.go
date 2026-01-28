@@ -40,6 +40,56 @@ type ProductsGetter interface {
 	Products(ctx context.Context, userID, limit, offset int64) ([]models.Product, int64, error)
 }
 
+// New godoc
+// @Summary      Получить список отслеживаемых товаров
+// @Description  ## Описание
+// @Description  Возвращает список всех товаров, которые отслеживает текущий пользователь, с поддержкой пагинации.
+// @Description
+// @Description  ### Процесс получения:
+// @Description  1. Извлечение параметров пагинации (limit, offset) из query
+// @Description  2. Валидация параметров (limit <= 100, offset >= 0)
+// @Description  3. Проверка авторизации (JWT токен)
+// @Description  4. Извлечение user_id из токена
+// @Description  5. Получение списка товаров из базы данных
+// @Description  6. Формирование метаданных пагинации
+// @Description  7. Возврат результата с заголовком Cache-Control
+// @Description
+// @Description  ### Параметры пагинации:
+// @Description  - **limit**: Количество товаров на странице (по умолчанию: 20, максимум: 100)
+// @Description  - **offset**: Количество товаров для пропуска (по умолчанию: 0)
+// @Description
+// @Description  ### Формула пагинации:
+// @Description  - Страница 1: `offset=0, limit=20`
+// @Description  - Страница 2: `offset=20, limit=20`
+// @Description  - Страница 3: `offset=40, limit=20`
+// @Description
+// @Description  ### Метаданные ответа:
+// @Description  - **total**: Общее количество товаров пользователя
+// @Description  - **total_pages**: Общее количество страниц
+// @Description  - **has_more**: Есть ли еще товары (для бесконечного скролла)
+// @Description
+// @Description  ### Кэширование:
+// @Description  - Ответ кэшируется на клиенте на 60 секунд (Cache-Control: private, max-age=60)
+// @Description  - Private cache означает что только браузер пользователя кэширует ответ
+// @Description
+// @Description  ### Структура товара:
+// @Description  Каждый товар содержит:
+// @Description  - ID, URL, название
+// @Description  - Маркетплейс (etsy, ebay, aliexpress)
+// @Description  - Текущая цена и валюта
+// @Description  - История изменений цены
+// @Description  - Дата добавления и последнего обновления
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        limit   query  int  false  "Количество товаров на странице"  minimum(1)  maximum(100)  default(20)  example(20)
+// @Param        offset  query  int  false  "Количество товаров для пропуска"  minimum(0)  default(0)  example(0)
+// @Success      200  {object}  object{status=string,products=[]object,pagination=object{limit=int,offset=int,total=int,total_pages=int,has_more=bool}}  "Список товаров с метаданными пагинации"
+// @Failure      401  {object}  object{status=string,error=string}  "Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status": "error", "error": "Unauthorized"})
+// @Failure      500  {object}  object{status=string,error=string}  "Внутренняя ошибка сервера"  example({"status": "error", "error": "Internal error"})
+// @Router       /products [get]
+// @x-order      2
 func New(
 	log *slog.Logger,
 	productsGetter ProductsGetter,

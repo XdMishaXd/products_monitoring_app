@@ -31,6 +31,51 @@ type Response struct {
 	ProductID int64 `json:"product_id"`
 }
 
+// New godoc
+// @Summary      Добавить товар для отслеживания
+// @Description  ## Описание
+// @Description  Добавляет товар из маркетплейса в список отслеживаемых для мониторинга цен.
+// @Description
+// @Description  ### Процесс добавления:
+// @Description  1. Валидация URL товара и названия
+// @Description  2. Определение маркетплейса по URL (Etsy, eBay, AliExpress)
+// @Description  3. Извлечение user_id из JWT токена (Authorization header)
+// @Description  4. Проверка что товар еще не отслеживается пользователем
+// @Description  5. Сохранение товара в базу данных
+// @Description  6. Запуск фонового мониторинга цены
+// @Description
+// @Description  ### Поддерживаемые маркетплейсы:
+// @Description  - **Etsy**: `https://www.etsy.com/listing/...`
+// @Description  - **eBay**: `https://www.ebay.com/itm/...`
+// @Description  - **AliExpress**: `https://aliexpress.com/item/...` или `https://aliexpress.ru/item/...`
+// @Description
+// @Description  ### URL Requirements:
+// @Description  - Валидный URL формат (протокол + домен)
+// @Description  - Ссылка должна вести на страницу товара
+// @Description  - Маркетплейс должен поддерживаться системой
+// @Description
+// @Description  ### Мониторинг цен:
+// @Description  После добавления товара система:
+// @Description  - Автоматически парсит начальную цену
+// @Description  - Проверяет цену каждые N часов (настраивается)
+// @Description  - Отправляет уведомления при изменении цены
+// @Description  - Строит график истории цен
+// @Description
+// @Description  ### Лимиты:
+// @Description  - Максимум 100 товаров на пользователя (можно настроить)
+// @Description  - Размер запроса: 1 МБ
+// @Description  - Timeout: 3 секунды
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        product  body  object{url=string,title=string}  true  "URL и название товара"  example({"url": "https://www.etsy.com/listing/123456/cool-product", "title": "Cool Product"})
+// @Success      201  {object}  object{status=string,product_id=int}  "Товар добавлен в отслеживание"  example({"status": "ok", "product_id": 42})
+// @Failure      409  {object}  object{status=string,error=string}  "Ошибка валидации: некорректный URL, отсутствует название или товар уже отслеживается"  example({"status": "error", "error": "Product already tracking"})
+// @Failure      401  {object}  object{status=string,error=string}  "Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status": "error", "error": "Unauthorized"})
+// @Failure      500  {object}  object{status=string,error=string}  "Внутренняя ошибка сервера"  example({"status": "error", "error": "Internal error"})
+// @Router       /product/add [post]
+// @x-order      1
 func New(
 	log *slog.Logger,
 	prodOp *products.ProductOperator,
@@ -107,7 +152,7 @@ func New(
 			if errors.Is(err, storage.ErrProductAlreadyExists) {
 				log.Info("Product already tracking")
 
-				render.Status(r, http.StatusBadRequest)
+				render.Status(r, http.StatusConflict)
 				render.JSON(w, r, resp.Error("Product already tracking"))
 
 				return

@@ -1,9 +1,14 @@
-env: "local" # local, dev, prod 
+env: "dev" # local, dev, prod 
 
 http_server:
   address: ":8080"
   timeout: 4s
   idle_timeout: 30s
+
+swagger:
+  username: "admin"
+  password: "admin"
+  enabled: true
 
 jwt_secret: "super-secret-key"
 

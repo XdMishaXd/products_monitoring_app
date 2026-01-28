@@ -1,0 +1,428 @@
+basePath: /
+host: localhost:8080
+info:
+  contact: {}
+  description: Сервис мониторинга товаров
+  title: Products monitoring service API
+  version: "1.0"
+paths:
+  /product:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        ## Описание
+        Удаляет товар из списка отслеживаемых для текущего пользователя.
+
+        ### Процесс удаления:
+        1. Извлечение product_id из query параметра `id`
+        2. Валидация ID (должен быть положительным числом)
+        3. Проверка авторизации (JWT токен)
+        4. Извлечение user_id из токена
+        5. Проверка что товар принадлежит пользователю
+        6. Удаление товара из базы данных
+        7. Остановка мониторинга цены
+
+        ### Что удаляется:
+        - Запись товара из таблицы products
+        - История изменений цен
+        - Настроенные уведомления для этого товара
+        - Планировщик мониторинга цены
+
+        ### Безопасность:
+        - Пользователь может удалить только **свои** товары
+        - Попытка удалить чужой товар вернет 404 (не раскрываем существование)
+        - Требуется валидный JWT токен
+
+        ### Важно:
+        - Удаление **необратимо**
+        - История цен также удаляется
+        - Для восстановления нужно добавить товар заново
+      parameters:
+      - description: ID товара для удаления
+        example: 42
+        in: query
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Товар успешно удален из отслеживания"  example({"status":
+            "ok"})'
+          schema:
+            properties:
+              status:
+                type: string
+            type: object
+        "400":
+          description: 'Некорректный ID: отсутствует, не число или отрицательное значение"  example({"status":
+            "error", "error": "Invalid id"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: 'Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status":
+            "error", "error": "Unauthorized"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "404":
+          description: 'Товар не найден или не принадлежит пользователю"  example({"status":
+            "error", "error": "Product not found"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "500":
+          description: 'Внутренняя ошибка сервера"  example({"status": "error", "error":
+            "Internal error"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Удалить товар из отслеживания
+      tags:
+      - products
+      x-order: 3
+    get:
+      consumes:
+      - application/json
+      description: |-
+        ## Описание
+        Возвращает детальную информацию о конкретном товаре по его ID.
+
+        ### Процесс получения:
+        1. Извлечение product_id из query параметра `id`
+        2. Валидация ID (должен быть положительным числом)
+        3. Проверка авторизации (JWT токен)
+        4. Получение товара из базы данных
+        5. Проверка статуса парсинга товара
+        6. Возврат детальной информации
+
+        ### Информация о товаре:
+        - Базовая информация: ID, URL, название, маркетплейс
+        - Текущая цена и валюта
+        - История изменений цены (массив объектов с ценой и датой)
+        - Статистика: минимальная, максимальная и средняя цена
+        - Даты: добавления товара и последнего обновления
+        - Статус парсинга (успешно, в процессе, ошибка)
+
+        ### Статусы парсинга:
+        - **409 Conflict**: Товар добавлен, но еще не распарсен (подождите 1-2 минуты)
+        - **500 Parsing error**: Ошибка при парсинге (недоступен сайт или изменилась структура)
+        - **200 OK**: Товар успешно распарсен, данные актуальны
+
+        ### Кэширование:
+        - Ответ кэшируется на клиенте на 60 секунд
+        - Private cache (только для конкретного пользователя)
+        - При изменении цены кэш автоматически инвалидируется
+
+        ### История цен:
+        Используется для построения графиков изменения цены во времени.
+        Содержит все зафиксированные изменения с момента добавления товара.
+      parameters:
+      - description: ID товара
+        example: 42
+        in: query
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Детальная информация о товаре
+          schema:
+            properties:
+              product:
+                type: object
+              status:
+                type: string
+            type: object
+        "400":
+          description: 'Некорректный ID: отсутствует, не число или отрицательное"  example({"status":
+            "error", "error": "Invalid id"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: 'Требуется авторизация"  example({"status": "error", "error":
+            "Unauthorized"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "404":
+          description: 'Товар не найден"  example({"status": "error", "error": "Product
+            not found"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "409":
+          description: 'Товар еще не распарсен, подождите"  example({"status": "error",
+            "error": "Product not yet received"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "500":
+          description: 'Ошибка парсинга или внутренняя ошибка"  example({"status":
+            "error", "error": "Parsing error"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Получить товар по ID
+      tags:
+      - products
+      x-order: 4
+  /product/add:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        ## Описание
+        Добавляет товар из маркетплейса в список отслеживаемых для мониторинга цен.
+
+        ### Процесс добавления:
+        1. Валидация URL товара и названия
+        2. Определение маркетплейса по URL (Etsy, eBay, AliExpress)
+        3. Извлечение user_id из JWT токена (Authorization header)
+        4. Проверка что товар еще не отслеживается пользователем
+        5. Сохранение товара в базу данных
+        6. Запуск фонового мониторинга цены
+
+        ### Поддерживаемые маркетплейсы:
+        - **Etsy**: `https://www.etsy.com/listing/...`
+        - **eBay**: `https://www.ebay.com/itm/...`
+        - **AliExpress**: `https://aliexpress.com/item/...` или `https://aliexpress.ru/item/...`
+
+        ### URL Requirements:
+        - Валидный URL формат (протокол + домен)
+        - Ссылка должна вести на страницу товара
+        - Маркетплейс должен поддерживаться системой
+
+        ### Мониторинг цен:
+        После добавления товара система:
+        - Автоматически парсит начальную цену
+        - Проверяет цену каждые N часов (настраивается)
+        - Отправляет уведомления при изменении цены
+        - Строит график истории цен
+
+        ### Лимиты:
+        - Максимум 100 товаров на пользователя (можно настроить)
+        - Размер запроса: 1 МБ
+        - Timeout: 3 секунды
+      parameters:
+      - description: URL и название товара
+        in: body
+        name: product
+        required: true
+        schema:
+          properties:
+            title:
+              type: string
+            url:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 'Товар добавлен в отслеживание"  example({"status": "ok", "product_id":
+            42})'
+          schema:
+            properties:
+              product_id:
+                type: integer
+              status:
+                type: string
+            type: object
+        "401":
+          description: 'Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status":
+            "error", "error": "Unauthorized"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "409":
+          description: 'Ошибка валидации: некорректный URL, отсутствует название или
+            товар уже отслеживается"  example({"status": "error", "error": "Product
+            already tracking"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "500":
+          description: 'Внутренняя ошибка сервера"  example({"status": "error", "error":
+            "Internal error"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Добавить товар для отслеживания
+      tags:
+      - products
+      x-order: 1
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        ## Описание
+        Возвращает список всех товаров, которые отслеживает текущий пользователь, с поддержкой пагинации.
+
+        ### Процесс получения:
+        1. Извлечение параметров пагинации (limit, offset) из query
+        2. Валидация параметров (limit <= 100, offset >= 0)
+        3. Проверка авторизации (JWT токен)
+        4. Извлечение user_id из токена
+        5. Получение списка товаров из базы данных
+        6. Формирование метаданных пагинации
+        7. Возврат результата с заголовком Cache-Control
+
+        ### Параметры пагинации:
+        - **limit**: Количество товаров на странице (по умолчанию: 20, максимум: 100)
+        - **offset**: Количество товаров для пропуска (по умолчанию: 0)
+
+        ### Формула пагинации:
+        - Страница 1: `offset=0, limit=20`
+        - Страница 2: `offset=20, limit=20`
+        - Страница 3: `offset=40, limit=20`
+
+        ### Метаданные ответа:
+        - **total**: Общее количество товаров пользователя
+        - **total_pages**: Общее количество страниц
+        - **has_more**: Есть ли еще товары (для бесконечного скролла)
+
+        ### Кэширование:
+        - Ответ кэшируется на клиенте на 60 секунд (Cache-Control: private, max-age=60)
+        - Private cache означает что только браузер пользователя кэширует ответ
+
+        ### Структура товара:
+        Каждый товар содержит:
+        - ID, URL, название
+        - Маркетплейс (etsy, ebay, aliexpress)
+        - Текущая цена и валюта
+        - История изменений цены
+        - Дата добавления и последнего обновления
+      parameters:
+      - default: 20
+        description: Количество товаров на странице
+        example: 20
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Количество товаров для пропуска
+        example: 0
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список товаров с метаданными пагинации
+          schema:
+            properties:
+              pagination:
+                properties:
+                  has_more:
+                    type: boolean
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+                type: object
+              products:
+                items:
+                  type: object
+                type: array
+              status:
+                type: string
+            type: object
+        "401":
+          description: 'Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status":
+            "error", "error": "Unauthorized"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+        "500":
+          description: 'Внутренняя ошибка сервера"  example({"status": "error", "error":
+            "Internal error"})'
+          schema:
+            properties:
+              error:
+                type: string
+              status:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Получить список отслеживаемых товаров
+      tags:
+      - products
+      x-order: 2
+swagger: "2.0"

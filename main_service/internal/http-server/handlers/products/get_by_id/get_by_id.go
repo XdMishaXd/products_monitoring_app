@@ -27,6 +27,53 @@ type ProductGetter interface {
 	ProductByID(ctx context.Context, productID int64) (models.Product, error)
 }
 
+// New godoc
+// @Summary      Получить товар по ID
+// @Description  ## Описание
+// @Description  Возвращает детальную информацию о конкретном товаре по его ID.
+// @Description
+// @Description  ### Процесс получения:
+// @Description  1. Извлечение product_id из query параметра `id`
+// @Description  2. Валидация ID (должен быть положительным числом)
+// @Description  3. Проверка авторизации (JWT токен)
+// @Description  4. Получение товара из базы данных
+// @Description  5. Проверка статуса парсинга товара
+// @Description  6. Возврат детальной информации
+// @Description
+// @Description  ### Информация о товаре:
+// @Description  - Базовая информация: ID, URL, название, маркетплейс
+// @Description  - Текущая цена и валюта
+// @Description  - История изменений цены (массив объектов с ценой и датой)
+// @Description  - Статистика: минимальная, максимальная и средняя цена
+// @Description  - Даты: добавления товара и последнего обновления
+// @Description  - Статус парсинга (успешно, в процессе, ошибка)
+// @Description
+// @Description  ### Статусы парсинга:
+// @Description  - **409 Conflict**: Товар добавлен, но еще не распарсен (подождите 1-2 минуты)
+// @Description  - **500 Parsing error**: Ошибка при парсинге (недоступен сайт или изменилась структура)
+// @Description  - **200 OK**: Товар успешно распарсен, данные актуальны
+// @Description
+// @Description  ### Кэширование:
+// @Description  - Ответ кэшируется на клиенте на 60 секунд
+// @Description  - Private cache (только для конкретного пользователя)
+// @Description  - При изменении цены кэш автоматически инвалидируется
+// @Description
+// @Description  ### История цен:
+// @Description  Используется для построения графиков изменения цены во времени.
+// @Description  Содержит все зафиксированные изменения с момента добавления товара.
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  query  int  true  "ID товара"  minimum(1)  example(42)
+// @Success      200  {object}  object{status=string,product=object}  "Детальная информация о товаре"
+// @Failure      400  {object}  object{status=string,error=string}  "Некорректный ID: отсутствует, не число или отрицательное"  example({"status": "error", "error": "Invalid id"})
+// @Failure      401  {object}  object{status=string,error=string}  "Требуется авторизация"  example({"status": "error", "error": "Unauthorized"})
+// @Failure      404  {object}  object{status=string,error=string}  "Товар не найден"  example({"status": "error", "error": "Product not found"})
+// @Failure      409  {object}  object{status=string,error=string}  "Товар еще не распарсен, подождите"  example({"status": "error", "error": "Product not yet received"})
+// @Failure      500  {object}  object{status=string,error=string}  "Ошибка парсинга или внутренняя ошибка"  example({"status": "error", "error": "Parsing error"})
+// @Router       /product [get]
+// @x-order      4
 func New(
 	log *slog.Logger,
 	prodOp ProductGetter,

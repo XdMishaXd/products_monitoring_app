@@ -17,6 +17,13 @@ type Config struct {
 	Postgres         `yaml:"postgres"`
 	HTTPServer       `yaml:"http_server"`
 	Redis            `yaml:"redis"`
+	Swagger          `yaml:"swagger"`
+}
+
+type Swagger struct {
+	Username string `yaml:"username" env-default:"admin"`
+	Password string `yaml:"password" env-default:"admin"`
+	Enabled  bool   `yaml:"enabled" env-default:"false"`
 }
 
 type HTTPServer struct {

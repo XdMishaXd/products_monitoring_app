@@ -25,6 +25,47 @@ type ProductsRemover interface {
 	DeleteProduct(ctx context.Context, productID, userID int64) error
 }
 
+// New godoc
+// @Summary      Удалить товар из отслеживания
+// @Description  ## Описание
+// @Description  Удаляет товар из списка отслеживаемых для текущего пользователя.
+// @Description
+// @Description  ### Процесс удаления:
+// @Description  1. Извлечение product_id из query параметра `id`
+// @Description  2. Валидация ID (должен быть положительным числом)
+// @Description  3. Проверка авторизации (JWT токен)
+// @Description  4. Извлечение user_id из токена
+// @Description  5. Проверка что товар принадлежит пользователю
+// @Description  6. Удаление товара из базы данных
+// @Description  7. Остановка мониторинга цены
+// @Description
+// @Description  ### Что удаляется:
+// @Description  - Запись товара из таблицы products
+// @Description  - История изменений цен
+// @Description  - Настроенные уведомления для этого товара
+// @Description  - Планировщик мониторинга цены
+// @Description
+// @Description  ### Безопасность:
+// @Description  - Пользователь может удалить только **свои** товары
+// @Description  - Попытка удалить чужой товар вернет 404 (не раскрываем существование)
+// @Description  - Требуется валидный JWT токен
+// @Description
+// @Description  ### Важно:
+// @Description  - Удаление **необратимо**
+// @Description  - История цен также удаляется
+// @Description  - Для восстановления нужно добавить товар заново
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id  query  int  true  "ID товара для удаления"  minimum(1)  example(42)
+// @Success      200  {object}  object{status=string}  "Товар успешно удален из отслеживания"  example({"status": "ok"})
+// @Failure      400  {object}  object{status=string,error=string}  "Некорректный ID: отсутствует, не число или отрицательное значение"  example({"status": "error", "error": "Invalid id"})
+// @Failure      401  {object}  object{status=string,error=string}  "Требуется авторизация: отсутствует или невалидный JWT токен"  example({"status": "error", "error": "Unauthorized"})
+// @Failure      404  {object}  object{status=string,error=string}  "Товар не найден или не принадлежит пользователю"  example({"status": "error", "error": "Product not found"})
+// @Failure      500  {object}  object{status=string,error=string}  "Внутренняя ошибка сервера"  example({"status": "error", "error": "Internal error"})
+// @Router       /product [delete]
+// @x-order      3
 func New(
 	log *slog.Logger,
 	prodOp ProductsRemover,
